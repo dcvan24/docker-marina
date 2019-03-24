@@ -182,8 +182,10 @@ type CreateRWLayerOpts struct {
 type Store interface {
 	Register(io.Reader, ChainID) (Layer, error)
 	Get(ChainID) (Layer, error)
+	Peek(ChainID) (Layer, error)
 	Map() map[ChainID]Layer
 	Release(Layer) ([]Metadata, error)
+	ReleaseSingle(Layer) ([]Metadata, error)
 
 	CreateRWLayer(id string, parent ChainID, opts *CreateRWLayerOpts) (RWLayer, error)
 	GetRWLayer(id string) (RWLayer, error)
@@ -232,6 +234,6 @@ func ReleaseAndLog(ls Store, l Layer) {
 // ensure consistent logging for release metadata
 func LogReleaseMetadata(metadatas []Metadata) {
 	for _, metadata := range metadatas {
-		logrus.Infof("Layer %s cleaned up", metadata.ChainID)
+		logrus.Debugf("Layer %s cleaned up", metadata.ChainID)
 	}
 }

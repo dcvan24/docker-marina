@@ -19,6 +19,7 @@ type Store interface {
 	Create(config []byte) (ID, error)
 	Get(id ID) (*Image, error)
 	Delete(id ID) ([]layer.Metadata, error)
+	DeleteReference(id ID) error
 	Search(partialID string) (ID, error)
 	SetParent(id ID, parent ID) error
 	GetParent(id ID) (ID, error)
@@ -254,6 +255,37 @@ func (is *store) Delete(id ID) ([]layer.Metadata, error) {
 		return is.lss[img.OperatingSystem()].Release(imageMeta.layer)
 	}
 	return nil, nil
+}
+
+func (is *store) DeleteReference(id ID) error {
+	is.Lock()
+	defer is.Unlock()
+
+	imageMeta := is.images[id]
+	if imageMeta == nil {
+		return fmt.Errorf("unrecognized image ID %s", id.String())
+	}
+	img, err := is.Get(id)
+	if err != nil {
+		return fmt.Errorf("unrecognized image %s, %v", id.String(), err)
+	}
+	if !system.IsOSSupported(img.OperatingSystem()) {
+		return fmt.Errorf("unsupported image operating system %q", img.OperatingSystem())
+	}
+	for id := range imageMeta.children {
+		is.fs.DeleteMetadata(id.Digest(), "parent")
+	}
+	if parent, err := is.GetParent(id); err == nil && is.images[parent] != nil {
+		delete(is.images[parent].children, id)
+	}
+
+	if err := is.digestSet.Remove(id.Digest()); err != nil {
+		logrus.Errorf("error removing %s from digest set: %q", id, err)
+	}
+	delete(is.images, id)
+	is.fs.Delete(id.Digest())
+
+	return nil
 }
 
 func (is *store) SetParent(id, parent ID) error {

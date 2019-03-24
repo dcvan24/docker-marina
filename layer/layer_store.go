@@ -310,7 +310,6 @@ func (ls *layerStore) registerWithDescriptor(ts io.Reader, parent ChainID, descr
 		references:     map[Layer]struct{}{},
 		descriptor:     descriptor,
 	}
-
 	if err = ls.driver.Create(layer.cacheID, pid, nil); err != nil {
 		return nil, err
 	}
@@ -360,7 +359,6 @@ func (ls *layerStore) registerWithDescriptor(ts io.Reader, parent ChainID, descr
 	}
 
 	ls.layerMap[layer.chainID] = layer
-
 	return layer.getReference(), nil
 }
 
@@ -391,6 +389,18 @@ func (ls *layerStore) Get(l ChainID) (Layer, error) {
 	}
 
 	return layer.getReference(), nil
+}
+
+func (ls *layerStore) Peek(l ChainID) (Layer, error) {
+	ls.layerL.Lock()
+	defer ls.layerL.Unlock()
+
+	layer, ok := ls.layerMap[l]
+	if !ok {
+		return nil, ErrLayerDoesNotExist
+	}
+
+	return layer, nil
 }
 
 func (ls *layerStore) Map() map[ChainID]Layer {
@@ -430,32 +440,29 @@ func (ls *layerStore) releaseLayer(l *roLayer) ([]Metadata, error) {
 	depth := 0
 	removed := []Metadata{}
 	for {
-		if l.referenceCount == 0 {
-			panic("layer not retained")
+		logrus.Debugf("Releasing layer %s, # of refs: %d", l.ChainID(), l.referenceCount)
+		if l.referenceCount > 0 {
+			l.referenceCount--
+			if l.referenceCount != 0 {
+				return removed, nil
+			}
+			if len(removed) == 0 && depth > 0 {
+				panic("cannot remove layer with child")
+			}
+			if l.hasReferences() {
+				panic("cannot delete referenced layer")
+			}
+			var metadata Metadata
+			if err := ls.deleteLayer(l, &metadata); err != nil {
+				return nil, err
+			}
+			delete(ls.layerMap, l.chainID)
+			removed = append(removed, metadata)
 		}
-		l.referenceCount--
-		if l.referenceCount != 0 {
-			return removed, nil
-		}
-
-		if len(removed) == 0 && depth > 0 {
-			panic("cannot remove layer with child")
-		}
-		if l.hasReferences() {
-			panic("cannot delete referenced layer")
-		}
-		var metadata Metadata
-		if err := ls.deleteLayer(l, &metadata); err != nil {
-			return nil, err
-		}
-
-		delete(ls.layerMap, l.chainID)
-		removed = append(removed, metadata)
 
 		if l.parent == nil {
 			return removed, nil
 		}
-
 		depth++
 		l = l.parent
 	}
@@ -471,10 +478,33 @@ func (ls *layerStore) Release(l Layer) ([]Metadata, error) {
 	if !layer.hasReference(l) {
 		return nil, ErrLayerNotRetained
 	}
-
 	layer.deleteReference(l)
-
 	return ls.releaseLayer(layer)
+}
+
+func (ls *layerStore) ReleaseSingle(l Layer) (removed []Metadata, err error) {
+	ls.layerL.Lock()
+	defer ls.layerL.Unlock()
+	layer, ok := ls.layerMap[l.ChainID()]
+	if !ok {
+		return nil, ErrLayerDoesNotExist
+	}
+	if layer.hasReference(l) {
+		layer.deleteReference(l)
+	}
+	if layer.referenceCount > 0 {
+		layer.referenceCount--
+	}
+	if layer.referenceCount != 0 {
+		return nil, nil
+	}
+	var metadata Metadata
+	if err = ls.deleteLayer(layer, &metadata); err != nil {
+		return nil, err
+	}
+	removed = append(removed, metadata)
+	delete(ls.layerMap, layer.chainID)
+	return removed, nil
 }
 
 func (ls *layerStore) CreateRWLayer(name string, parent ChainID, opts *CreateRWLayerOpts) (RWLayer, error) {
