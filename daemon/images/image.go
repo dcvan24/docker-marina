@@ -6,6 +6,7 @@ import (
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/errdefs"
 	"github.com/docker/docker/image"
+	log "github.com/sirupsen/logrus"
 )
 
 // ErrImageDoesNotExist is error returned when no image can be found for a reference.
@@ -30,13 +31,23 @@ func (i *ImageService) GetImage(refOrID string) (*image.Image, error) {
 	if err != nil {
 		return nil, errdefs.InvalidParameter(err)
 	}
+	var id image.ID
+	defer func() {
+		if len(id) == 0 {
+			return
+		}
+		if err := i.imageCacheDriver.Get(id); err != nil {
+			log.Error(err)
+		}
+	}()
+
 	namedRef, ok := ref.(reference.Named)
 	if !ok {
 		digested, ok := ref.(reference.Digested)
 		if !ok {
 			return nil, ErrImageDoesNotExist{ref}
 		}
-		id := image.IDFromDigest(digested.Digest())
+		id = image.IDFromDigest(digested.Digest())
 		if img, err := i.imageStore.Get(id); err == nil {
 			return img, nil
 		}
@@ -45,7 +56,7 @@ func (i *ImageService) GetImage(refOrID string) (*image.Image, error) {
 
 	if digest, err := i.referenceStore.Get(namedRef); err == nil {
 		// Search the image stores to get the operating system, defaulting to host OS.
-		id := image.IDFromDigest(digest)
+		id = image.IDFromDigest(digest)
 		if img, err := i.imageStore.Get(id); err == nil {
 			return img, nil
 		}

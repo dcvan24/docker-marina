@@ -39,13 +39,15 @@ type ImageServiceConfig struct {
 	MaxConcurrentUploads      int
 	ReferenceStore            dockerreference.Store
 	RegistryService           registry.Service
+	CacheDriver               string
+	CacheCapacity             string
 }
 
 // NewImageService returns a new ImageService from a configuration
 func NewImageService(config ImageServiceConfig) *ImageService {
 	logrus.Debugf("Max Concurrent Downloads: %d", config.MaxConcurrentDownloads)
 	logrus.Debugf("Max Concurrent Uploads: %d", config.MaxConcurrentUploads)
-	return &ImageService{
+	is := &ImageService{
 		containers:                config.ContainerStore,
 		distributionMetadataStore: config.DistributionMetadataStore,
 		downloadManager:           xfer.NewLayerDownloadManager(config.LayerStores, config.MaxConcurrentDownloads),
@@ -56,6 +58,8 @@ func NewImageService(config ImageServiceConfig) *ImageService {
 		registryService:           config.RegistryService,
 		uploadManager:             xfer.NewLayerUploadManager(config.MaxConcurrentUploads),
 	}
+	is.imageCacheDriver = newCacheDriver(config.CacheDriver, config.CacheCapacity, is)
+	return is
 }
 
 // ImageService provides a backend for image management
@@ -70,6 +74,7 @@ type ImageService struct {
 	referenceStore            dockerreference.Store
 	registryService           registry.Service
 	uploadManager             *xfer.LayerUploadManager
+	imageCacheDriver          ImageCacheDriver
 }
 
 // DistributionServices provides daemon image storage services

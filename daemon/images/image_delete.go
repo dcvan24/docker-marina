@@ -327,8 +327,15 @@ func (i *ImageService) imageDeleteHelper(imgID image.ID, records *[]types.ImageD
 		return err
 	}
 
+	img, err := i.imageStore.Get(imgID)
+	if err != nil {
+		return err
+	}
 	removedLayers, err := i.imageStore.Delete(imgID)
 	if err != nil {
+		return err
+	}
+	if err = i.imageCacheDriver.Remove(img); err != nil {
 		return err
 	}
 

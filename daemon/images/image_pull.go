@@ -16,6 +16,7 @@ import (
 	"github.com/docker/docker/registry"
 	"github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	log "github.com/sirupsen/logrus"
 )
 
 // PullImage initiates a pull operation. image is the repository name to pull, and
@@ -82,6 +83,15 @@ func (i *ImageService) pullImageWithReference(ctx context.Context, ref reference
 	}
 
 	err := distribution.Pull(ctx, ref, imagePullConfig)
+	defer func() {
+		img, err := i.GetImage(ref.String())
+		if err != nil {
+			log.Error(err)
+		}
+		if err = i.imageCacheDriver.Put(img); err != nil {
+			log.Error(err)
+		}
+	}()
 	close(progressChan)
 	<-writesDone
 	return err
