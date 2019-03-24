@@ -42,6 +42,7 @@ import (
 	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/sirupsen/logrus"
+
 	// register graph drivers
 	_ "github.com/docker/docker/daemon/graphdriver/register"
 	"github.com/docker/docker/daemon/stats"
@@ -1029,6 +1030,8 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 		MaxConcurrentUploads:      *config.MaxConcurrentUploads,
 		ReferenceStore:            rs,
 		RegistryService:           registryService,
+		CacheDriver:               config.CacheDriver,
+		CacheCapacity:             config.CacheCapacity,
 	})
 
 	go d.execCommandGC()

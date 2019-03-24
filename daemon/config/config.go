@@ -160,6 +160,10 @@ type CommonConfig struct {
 	// may take place at a time for each push.
 	MaxConcurrentUploads *int `json:"max-concurrent-uploads,omitempty"`
 
+	//Cache related
+	CacheDriver   string `json:"cache-driver,omitempty"`
+	CacheCapacity string `json:"cache-capacity,omitempty"`
+
 	// ShutdownTimeout is the timeout value (in seconds) the daemon will wait for the container
 	// to stop when daemon is being shutdown
 	ShutdownTimeout int `json:"shutdown-timeout,omitempty"`

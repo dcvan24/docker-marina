@@ -4,6 +4,7 @@ import (
 	"runtime"
 
 	"github.com/docker/docker/daemon/config"
+	"github.com/docker/docker/daemon/images"
 	"github.com/docker/docker/opts"
 	"github.com/docker/docker/registry"
 	"github.com/spf13/pflag"
@@ -53,6 +54,8 @@ func installCommonConfigFlags(conf *config.Config, flags *pflag.FlagSet) error {
 	// Windows doesn't support setting the storage driver - there is no choice as to which ones to use.
 	if runtime.GOOS != "windows" {
 		flags.StringVarP(&conf.GraphDriver, "storage-driver", "s", "", "Storage driver to use")
+		flags.StringVar(&conf.CacheDriver, "cache-driver", "", "Cache driver to use")
+		flags.StringVar(&conf.CacheCapacity, "cache-capacity", images.DefaultCacheCapacity, "Cache capacity")
 	}
 
 	flags.IntVar(&conf.Mtu, "mtu", 0, "Set the containers network MTU")
