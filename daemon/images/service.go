@@ -39,6 +39,7 @@ type ImageServiceConfig struct {
 	MaxConcurrentUploads      int
 	ReferenceStore            dockerreference.Store
 	RegistryService           registry.Service
+	CacheArchive              bool
 }
 
 // NewImageService returns a new ImageService from a configuration
@@ -48,7 +49,7 @@ func NewImageService(config ImageServiceConfig) *ImageService {
 	return &ImageService{
 		containers:                config.ContainerStore,
 		distributionMetadataStore: config.DistributionMetadataStore,
-		downloadManager:           xfer.NewLayerDownloadManager(config.LayerStores, config.MaxConcurrentDownloads),
+		downloadManager:           xfer.NewLayerDownloadManager(config.LayerStores, config.MaxConcurrentDownloads, config.CacheArchive),
 		eventsService:             config.EventsService,
 		imageStore:                config.ImageStore,
 		layerStores:               config.LayerStores,
@@ -127,6 +128,18 @@ func (i *ImageService) CreateLayer(container *container.Container, initFunc laye
 	// Indexing by OS is safe here as validation of OS has already been performed in create() (the only
 	// caller), and guaranteed non-nil
 	return i.layerStores[container.OS].CreateRWLayer(container.ID, layerID, rwLayerOpts)
+}
+
+// GetReadOnlyLayer returns a read-only layer by chain ID and operating system
+// called from daemon/cache
+func (i *ImageService) GetReadOnlyLayer(chainID layer.ChainID, os string) (layer.Layer, error) {
+	return i.layerStores[os].Get(chainID)
+}
+
+// ReleaseReadOnlyLayer releases a read-only layer
+// called from daemon/cache
+func (i *ImageService) ReleaseReadOnlyLayer(layer layer.Layer, os string) ([]layer.Metadata, error) {
+	return i.layerStores[os].Release(layer)
 }
 
 // GetLayerByID returns a layer by ID and operating system

@@ -27,6 +27,7 @@ type LayerDownloadManager struct {
 	layerStores  map[string]layer.Store
 	tm           TransferManager
 	waitDuration time.Duration
+	cacheArchive bool
 }
 
 // SetConcurrency sets the max concurrent downloads for each pull
@@ -35,11 +36,12 @@ func (ldm *LayerDownloadManager) SetConcurrency(concurrency int) {
 }
 
 // NewLayerDownloadManager returns a new LayerDownloadManager.
-func NewLayerDownloadManager(layerStores map[string]layer.Store, concurrencyLimit int, options ...func(*LayerDownloadManager)) *LayerDownloadManager {
+func NewLayerDownloadManager(layerStores map[string]layer.Store, concurrencyLimit int, cacheArchive bool, options ...func(*LayerDownloadManager)) *LayerDownloadManager {
 	manager := LayerDownloadManager{
 		layerStores:  layerStores,
 		tm:           NewTransferManager(concurrencyLimit),
 		waitDuration: time.Second,
+		cacheArchive: cacheArchive,
 	}
 	for _, option := range options {
 		option(&manager)
@@ -262,58 +264,70 @@ func (ldm *LayerDownloadManager) makeDownloadFunc(descriptor DownloadDescriptor,
 				downloadReader io.ReadCloser
 				size           int64
 				err            error
+				path           string
 				retries        int
 			)
 
 			defer descriptor.Close()
 
-			for {
-				downloadReader, size, err = descriptor.Download(d.Transfer.Context(), progressOutput)
-				if err == nil {
-					break
-				}
+			diffID, _ := descriptor.DiffID()
 
-				// If an error was returned because the context
-				// was cancelled, we shouldn't retry.
-				select {
-				case <-d.Transfer.Context().Done():
-					d.err = err
-					return
-				default:
-				}
-
-				retries++
-				if _, isDNR := err.(DoNotRetry); isDNR || retries == maxDownloadAttempts {
-					logrus.Errorf("Download failed: %v", err)
-					d.err = err
-					return
-				}
-
-				logrus.Errorf("Download failed, retrying: %v", err)
-				delay := retries * 5
-				ticker := time.NewTicker(ldm.waitDuration)
-
-			selectLoop:
+			if downloadReader, err = getArchiveReader(diffID); downloadReader == nil || !ldm.cacheArchive {
+				logrus.Debugf("Layer archive of %s is not found, downloading ...", diffID)
 				for {
-					progress.Updatef(progressOutput, descriptor.ID(), "Retrying in %d second%s", delay, (map[bool]string{true: "s"})[delay != 1])
+					downloadReader, size, err = descriptor.Download(d.Transfer.Context(), progressOutput)
+					if ldm.cacheArchive {
+						downloadReader, path, err = createLayerArchive(d.Transfer.Context(), downloadReader, err)
+					}
+					if err == nil {
+						break
+					}
+
+					// If an error was returned because the context
+					// was cancelled, we shouldn't retry.
 					select {
-					case <-ticker.C:
-						delay--
-						if delay == 0 {
-							ticker.Stop()
-							break selectLoop
-						}
 					case <-d.Transfer.Context().Done():
-						ticker.Stop()
-						d.err = errors.New("download cancelled during retry delay")
+						d.err = err
+						return
+					default:
+					}
+
+					retries++
+					if _, isDNR := err.(DoNotRetry); isDNR || retries == maxDownloadAttempts {
+						logrus.Errorf("Download failed: %v", err)
+						d.err = err
 						return
 					}
 
+					logrus.Errorf("Download failed, retrying: %v", err)
+					delay := retries * 5
+					ticker := time.NewTicker(ldm.waitDuration)
+
+				selectLoop:
+					for {
+						progress.Updatef(progressOutput, descriptor.ID(), "Retrying in %d second%s", delay, (map[bool]string{true: "s"})[delay != 1])
+						select {
+						case <-ticker.C:
+							delay--
+							if delay == 0 {
+								ticker.Stop()
+								break selectLoop
+							}
+						case <-d.Transfer.Context().Done():
+							ticker.Stop()
+							d.err = errors.New("download cancelled during retry delay")
+							return
+						}
+
+					}
 				}
+
+				close(inactive)
+			} else {
+				logrus.Debugf("Layer archive of %s is found, skip downloading", diffID)
 			}
 
-			close(inactive)
-
+			// Await parent downloads finished before starting extraction
 			if parentDownload != nil {
 				select {
 				case <-d.Transfer.Context().Done():
@@ -358,6 +372,12 @@ func (ldm *LayerDownloadManager) makeDownloadFunc(descriptor DownloadDescriptor,
 					d.err = fmt.Errorf("failed to register layer: %v", err)
 				}
 				return
+			}
+
+			if ldm.cacheArchive {
+				if err := renameArchive(path, d.layer.DiffID()); err != nil {
+					d.err = err
+				}
 			}
 
 			progress.Update(progressOutput, descriptor.ID(), "Pull complete")

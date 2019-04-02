@@ -55,6 +55,10 @@ func installCommonConfigFlags(conf *config.Config, flags *pflag.FlagSet) error {
 		flags.StringVarP(&conf.GraphDriver, "storage-driver", "s", "", "Storage driver to use")
 	}
 
+	flags.StringVar(&conf.CacheCapacity, "cache-capacity", "200m", "Set cache capacity")
+	flags.StringVar(&conf.CachePolicy, "cache-policy", "image-lru", "Cache policy to use")
+	flags.BoolVar(&conf.CacheArchive, "cache-archive", false, "Cache compressed archive of image layers")
+
 	flags.IntVar(&conf.Mtu, "mtu", 0, "Set the containers network MTU")
 	flags.BoolVar(&conf.RawLogs, "raw-logs", false, "Full timestamps without ANSI coloring")
 	flags.Var(opts.NewListOptsRef(&conf.DNS, opts.ValidateIPAddress), "dns", "DNS server to use")

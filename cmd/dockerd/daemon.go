@@ -335,6 +335,7 @@ func newRouterOptions(config *config.Config, d *daemon.Daemon) (routerOptions, e
 	if err != nil {
 		return opts, errors.Wrap(err, "failed to create buildmanager")
 	}
+
 	return routerOptions{
 		sessionManager: sm,
 		buildBackend:   bb,
@@ -489,11 +490,13 @@ func loadDaemonCliConfig(opts *daemonOptions) (*config.Config, error) {
 func initRouter(opts routerOptions) {
 	decoder := runconfig.ContainerDecoder{}
 
+	daemonWrapper := daemon.NewWrapper(opts.daemon)
+
 	routers := []router.Router{
 		// we need to add the checkpoint router before the container router or the DELETE gets masked
 		checkpointrouter.NewRouter(opts.daemon, decoder),
-		container.NewRouter(opts.daemon, decoder),
-		image.NewRouter(opts.daemon.ImageService()),
+		container.NewRouter(daemonWrapper, decoder),
+		image.NewRouter(daemonWrapper),
 		systemrouter.NewRouter(opts.daemon, opts.cluster, opts.buildCache, opts.buildkit, opts.features),
 		volume.NewRouter(opts.daemon.VolumesService()),
 		build.NewRouter(opts.buildBackend, opts.daemon, opts.features),

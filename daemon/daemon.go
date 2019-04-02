@@ -31,6 +31,7 @@ import (
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/docker/docker/builder"
 	"github.com/docker/docker/container"
+	"github.com/docker/docker/daemon/cache"
 	"github.com/docker/docker/daemon/config"
 	"github.com/docker/docker/daemon/discovery"
 	"github.com/docker/docker/daemon/events"
@@ -42,6 +43,7 @@ import (
 	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/sirupsen/logrus"
+
 	// register graph drivers
 	_ "github.com/docker/docker/daemon/graphdriver/register"
 	"github.com/docker/docker/daemon/stats"
@@ -84,6 +86,7 @@ type Daemon struct {
 	containersReplica container.ViewDB
 	execCommands      *exec.Store
 	imageService      *images.ImageService
+	imageCache        cache.ImageCache
 	idIndex           *truncindex.TruncIndex
 	configStore       *config.Config
 	statsCollector    *stats.Collector
@@ -1029,7 +1032,13 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 		MaxConcurrentUploads:      *config.MaxConcurrentUploads,
 		ReferenceStore:            rs,
 		RegistryService:           registryService,
+		CacheArchive:              config.CacheArchive,
 	})
+
+	d.imageCache, err = cache.NewImageCache(config, d.imageService)
+	if err != nil {
+		return nil, err
+	}
 
 	go d.execCommandGC()
 
@@ -1469,6 +1478,11 @@ func (daemon *Daemon) IdentityMapping() *idtools.IdentityMapping {
 // ImageService returns the Daemon's ImageService
 func (daemon *Daemon) ImageService() *images.ImageService {
 	return daemon.imageService
+}
+
+// ImageCache returns the Daemon's ImageCache
+func (daemon *Daemon) ImageCache() cache.ImageCache {
+	return daemon.imageCache
 }
 
 // BuilderBackend returns the backend used by builder

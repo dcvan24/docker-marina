@@ -133,6 +133,9 @@ type CommonConfig struct {
 	ExecRoot              string                    `json:"exec-root,omitempty"`
 	SocketGroup           string                    `json:"group,omitempty"`
 	CorsHeaders           string                    `json:"api-cors-header,omitempty"`
+	CachePolicy           string                    `json:"cache-policy,omitempty"`
+	CacheCapacity         string                    `json:"cache-capacity,omitempty"`
+	CacheArchive          bool                      `json:"cache-archive,omitempty"`
 
 	// LiveRestoreEnabled determines whether we should keep containers
 	// alive upon daemon shutdown/start
