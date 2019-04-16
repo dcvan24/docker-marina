@@ -14,6 +14,7 @@ import (
 )
 
 const (
+	policyNaive      = "naive"
 	policyLayerLRU   = "layer-lru"
 	policyImageLRU   = "image-lru"
 	policyArchiveLRU = "archive-lru"
@@ -36,6 +37,8 @@ func NewImageCache(cfg *config.Config, is *images.ImageService) (ImageCache, err
 		return nil, err
 	}
 	switch policy := strings.ToLower(cfg.CachePolicy); policy {
+	case policyNaive:
+		return newNaiveCache(capacity, is), nil
 	case policyImageLRU:
 		return newImageLRUCache(capacity, is), nil
 	case policyLayerLRU:
@@ -46,7 +49,7 @@ func NewImageCache(cfg *config.Config, is *images.ImageService) (ImageCache, err
 		}
 		return newArchiveLRUCache(capacity, is), nil
 	}
-	return newImageLRUCache(capacity, is), nil
+	return nil, nil
 }
 
 type cacheBase struct {

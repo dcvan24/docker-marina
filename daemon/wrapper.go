@@ -66,7 +66,9 @@ func (c *Wrapper) PullImage(ctx context.Context, image, tag string, platform *sp
 		return err
 	}
 
-	c.ImageCache.PutImage(img)
+	if c.ImageCache != nil {
+		c.ImageCache.PutImage(img)
+	}
 	return nil
 }
 
@@ -76,6 +78,10 @@ func (c *Wrapper) ImageDelete(imageRef string, force, prune bool) ([]types.Image
 	if err != nil {
 		return resps, err
 	}
+	if c.ImageCache == nil {
+		return resps, err
+	}
+
 	for _, r := range resps {
 		if r.Deleted == "" {
 			continue
@@ -92,6 +98,8 @@ func (c *Wrapper) ContainerCreate(config types.ContainerCreateConfig) (container
 	if err != nil {
 		return body, err
 	}
-	c.ImageCache.UpdateImage(config.Config.Image)
+	if c.ImageCache != nil {
+		c.ImageCache.UpdateImage(config.Config.Image)
+	}
 	return body, err
 }

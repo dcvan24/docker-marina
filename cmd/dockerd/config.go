@@ -56,7 +56,7 @@ func installCommonConfigFlags(conf *config.Config, flags *pflag.FlagSet) error {
 	}
 
 	flags.StringVar(&conf.CacheCapacity, "cache-capacity", "200m", "Set cache capacity")
-	flags.StringVar(&conf.CachePolicy, "cache-policy", "image-lru", "Cache policy to use")
+	flags.StringVar(&conf.CachePolicy, "cache-policy", "", "Cache policy to use")
 	flags.BoolVar(&conf.CacheArchive, "cache-archive", false, "Cache compressed archive of image layers")
 
 	flags.IntVar(&conf.Mtu, "mtu", 0, "Set the containers network MTU")
