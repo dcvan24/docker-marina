@@ -42,15 +42,9 @@ func (c *imageLRUCache) PutImage(img *image.Image) {
 		return
 	}
 
-	e, ok := c.images[img.ID()]
-	if ok {
-		oldImg := e.Value.(*image.Image)
-		c.evictList.Remove(e)
-		oldSize, err := c.getImageSize(oldImg)
-		if err != nil {
-			return
-		}
-		c.level -= oldSize
+	if e, ok := c.images[img.ID()]; ok {
+		c.evictList.MoveToFront(e)
+		return
 	}
 
 	newSize, err := c.getImageSize(img)
@@ -78,7 +72,6 @@ func (c *imageLRUCache) UpdateImage(refOrID string) {
 	if e, ok := c.images[img.ID()]; ok {
 		c.evictList.MoveToFront(e)
 		logrus.Infof("Updated image %s, %d/%d (%.3f)", img.ID(), c.level, c.capacity, c.percent())
-		c.evict()
 		return
 	}
 	logrus.Infof("Image %s is not in cache", img.ID())
@@ -120,7 +113,7 @@ func (c *imageLRUCache) evict() {
 
 		logrus.Infof("Evicting image %s ...", img.ID())
 
-		if _, err := c.imageService.ImageDelete(img.ImageID(), false, false); err != nil {
+		if _, err := c.imageService.ImageDelete(img.ImageID(), true, false); err != nil {
 			if strings.Contains(strings.ToLower(err.Error()), "conflict") {
 				logrus.Debugf("Image deletion conflict detected, skip")
 				continue

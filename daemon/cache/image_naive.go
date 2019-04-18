@@ -52,12 +52,7 @@ func (c *naiveCache) PutImage(img *image.Image) {
 	c.evict(img.ImageID())
 }
 
-func (c *naiveCache) UpdateImage(refOrID string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.evict("")
-}
+func (c *naiveCache) UpdateImage(refOrID string) {}
 
 func (c *naiveCache) RemoveImage(imgID image.ID) {
 	c.mu.Lock()

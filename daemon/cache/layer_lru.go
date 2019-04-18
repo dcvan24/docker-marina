@@ -70,12 +70,10 @@ func (c *layerLRUCache) PutImage(img *image.Image) {
 }
 
 func (c *layerLRUCache) putLayer(chainID layer.ChainID, img *image.Image) {
-	defer c.evict(img.ID())
 
 	if e, ok := c.layers[chainID]; ok {
-		oldLayer := e.Value.(*cacheLayer)
-		c.evictList.Remove(e)
-		c.level -= oldLayer.size
+		c.evictList.MoveToFront(e)
+		return
 	}
 
 	l, err := c.imageService.GetReadOnlyLayer(chainID, img.OperatingSystem())
@@ -98,6 +96,8 @@ func (c *layerLRUCache) putLayer(chainID layer.ChainID, img *image.Image) {
 
 	c.layers[chainID] = c.evictList.PushFront(cl)
 	c.level += size
+	c.evict(img.ID())
+
 	logrus.Infof("Put layer %s, %d/%d (%.3f)", chainID, c.level, c.capacity, c.percent())
 }
 
@@ -129,7 +129,6 @@ func (c *layerLRUCache) UpdateImage(refOrID string) {
 }
 
 func (c *layerLRUCache) updateLayer(chainID layer.ChainID, img *image.Image) {
-	defer c.evict("")
 	e, ok := c.layers[chainID]
 	if !ok {
 		logrus.Debugf("Layer %s is not in cache", chainID)
@@ -224,6 +223,7 @@ func (c *layerLRUCache) evict(current image.ID) {
 		if conflict {
 			logrus.Debugf("Image deletion conflict detected, skip")
 			checkboard[chainID]++
+			c.evictList.MoveToFront(e)
 			if checkboard[chainID] > 3 {
 				logrus.Warnf("Exceeding the max eviction retries, abort")
 				return
@@ -231,20 +231,11 @@ func (c *layerLRUCache) evict(current image.ID) {
 			continue
 		}
 
-		var (
-			released []layer.Metadata
-			err      error
-		)
-		for released, err = c.imageService.ReleaseReadOnlyLayer(cl.layer, cl.os); err != nil; {
+		released, err := c.imageService.ReleaseReadOnlyLayer(cl.layer, cl.os)
+		if err != nil {
 			if strings.Contains(strings.ToLower(err.Error()), "layer not retained") {
-				// Bump up the number of references to the layer to evict in order to
-				// clean up the layer data
-				if cl.layer, err = c.imageService.GetReadOnlyLayer(chainID, cl.os); err != nil {
-					logrus.Errorf("error getting layer: %v", err)
-					return
-				}
-			} else {
 				logrus.Errorf("error releasing layer: %v", err)
+				return
 			}
 		}
 
